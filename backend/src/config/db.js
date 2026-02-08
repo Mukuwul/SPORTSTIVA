@@ -12,16 +12,15 @@ dotenv.config();
  * without opening a new connection for each query
  */
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  // Maximum number of clients in the pool
+  connectionString: process.env.DATABASE_URL,
+
+  // Required for most hosted PostgreSQL (Neon, Supabase, Render)
+  ssl: {
+    rejectUnauthorized: false,
+  },
+
   max: 20,
-  // How long a client is allowed to remain idle before being closed
   idleTimeoutMillis: 30000,
-  // How long to wait for a connection to become available
   connectionTimeoutMillis: 2000,
 });
 

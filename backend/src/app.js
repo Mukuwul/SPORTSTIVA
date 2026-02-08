@@ -15,6 +15,15 @@ import {
   shutdownWebSocketServer,
 } from "./websocket/wsServer.js";
 
+const verifyDbConnection = async () => {
+  try {
+    await pool.query("SELECT 1");
+    console.log("db connected");
+  } catch (error) {
+    console.error("db connection failed:", error?.message ?? error);
+  }
+};
+
 /**
  * Initialize Express Application
  */
@@ -107,6 +116,7 @@ server.listen(PORT, () => {
   console.log(`🔌 WebSocket Server: ws://localhost:${PORT}/ws`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
   console.log("=================================");
+  verifyDbConnection();
 });
 
 /**
