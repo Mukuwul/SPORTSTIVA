@@ -1,4 +1,3 @@
-// src/server.js
 // Main server file - Entry point for the application
 // Initializes Express server and WebSocket server
 
@@ -9,20 +8,12 @@ import http from "http";
 import { pool } from "./config/db.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import matchRoutes from "./routes/matchRoutes.js";
+import syncRoutes from "./routes/syncRoutes.js";
 import { getStats } from "./websocket/wsHandlers.js";
 import {
   initWebSocketServer,
   shutdownWebSocketServer,
 } from "./websocket/wsServer.js";
-
-const verifyDbConnection = async () => {
-  try {
-    await pool.query("SELECT 1");
-    console.log("db connected");
-  } catch (error) {
-    console.error("db connection failed:", error?.message ?? error);
-  }
-};
 
 /**
  * Initialize Express Application
@@ -83,6 +74,9 @@ app.get("/api/ws-stats", (req, res) => {
 // Match routes
 app.use("/api/matches", matchRoutes);
 
+// Sync routes (for external API integration)
+app.use("/api/sync", syncRoutes);
+
 /**
  * Error Handling
  */
@@ -116,8 +110,22 @@ server.listen(PORT, () => {
   console.log(`🔌 WebSocket Server: ws://localhost:${PORT}/ws`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
   console.log("=================================");
-  verifyDbConnection();
 });
+
+/**
+ * Optional: Auto-sync live matches from external API
+ * Uncomment to enable automatic polling
+ */
+// const apiFootballService = require('./services/apiFootballService');
+// let pollingInterval = null;
+
+// if (process.env.ENABLE_AUTO_SYNC === 'true') {
+//   const syncIntervalSeconds = parseInt(process.env.SYNC_INTERVAL_SECONDS) || 60;
+//   pollingInterval = apiFootballService.startLiveMatchPolling(syncIntervalSeconds);
+//   console.log(`🔄 Auto-sync enabled (every ${syncIntervalSeconds}s)`);
+// } else {
+//   console.log('ℹ️  Auto-sync disabled. Use POST /api/sync/live-matches to sync manually');
+// }
 
 /**
  * Graceful Shutdown Handling
@@ -125,6 +133,12 @@ server.listen(PORT, () => {
  */
 const shutdown = () => {
   console.log("\n🛑 Received shutdown signal...");
+
+  // Stop auto-sync polling if enabled
+  // if (pollingInterval) {
+  //   const apiFootballService = require('./services/apiFootballService');
+  //   apiFootballService.stopLiveMatchPolling(pollingInterval);
+  // }
 
   // Close WebSocket server first
   shutdownWebSocketServer(wss);
