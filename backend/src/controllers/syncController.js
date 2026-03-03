@@ -9,11 +9,12 @@ import apiFootballService from "../services/api.js";
  */
 const syncLiveMatches = async (req, res, next) => {
   try {
-    await apiFootballService.syncLiveMatches();
+    const result = await apiFootballService.syncLiveMatches();
 
     res.json({
       success: true,
       message: "Live matches sync triggered successfully",
+      data: result,
     });
   } catch (error) {
     next(error);

@@ -1,0 +1,49 @@
+@import url("https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Sora:wght@600;700&display=swap");
+
+:root {
+  --yellow-100: #fff8df;
+  --yellow-200: #f9e9ad;
+  --yellow-300: #e6cf83;
+  --yellow-400: #f3c629;
+  --yellow-500: #e8b800;
+
+  --ink-900: #1b2538;
+  --ink-600: #56627a;
+
+  --blue-600: #3360b8;
+  --blue-700: #1e468f;
+  --green-600: #2f9a65;
+  --green-700: #1f754c;
+  --warning-700: #8f6300;
+  --danger-600: #b74040;
+
+  font-family: "Barlow", sans-serif;
+  line-height: 1.45;
+  font-weight: 400;
+  color: var(--ink-900);
+  background-color: #fff9e5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 10% 15%, rgba(232, 184, 0, 0.28) 0%, transparent 34%),
+    radial-gradient(circle at 88% 0%, rgba(30, 70, 143, 0.17) 0%, transparent 30%),
+    linear-gradient(165deg, #fff6d2 0%, #fffef8 55%, #f2f8ff 100%);
+}
+
+#root {
+  min-height: 100vh;
+}

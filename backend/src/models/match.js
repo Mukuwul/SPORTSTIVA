@@ -50,15 +50,49 @@ class Match {
     away_team,
     team_home,
     team_away,
+    home_score,
+    away_score,
+    score_home,
+    score_away,
+    status,
     start_time,
   }) {
     const resolvedHomeTeam = home_team ?? team_home;
     const resolvedAwayTeam = away_team ?? team_away;
+    const resolvedHomeScore = home_score ?? score_home ?? 0;
+    const resolvedAwayScore = away_score ?? score_away ?? 0;
+    const validStatuses = ["scheduled", "live", "finished"];
+    const resolvedStatus = validStatuses.includes(status) ? status : "scheduled";
     const result = await query(
-      `INSERT INTO matches (home_team, away_team, start_time, status)
-       VALUES ($1, $2, $3, 'scheduled')
+      `INSERT INTO matches (home_team, away_team, home_score, away_score, start_time, status)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [resolvedHomeTeam, resolvedAwayTeam, start_time || new Date()],
+      [
+        resolvedHomeTeam,
+        resolvedAwayTeam,
+        resolvedHomeScore,
+        resolvedAwayScore,
+        start_time || new Date(),
+        resolvedStatus,
+      ],
+    );
+    return result.rows[0];
+  }
+
+  /**
+   * Find likely existing match for sync updates.
+   * Matches by teams and start time window to avoid duplicate inserts on each poll.
+   */
+  static async findExistingForSync(home_team, away_team, start_time) {
+    const result = await query(
+      `SELECT *
+       FROM matches
+       WHERE home_team = $1
+         AND away_team = $2
+         AND ABS(EXTRACT(EPOCH FROM (start_time - $3::timestamptz))) <= 43200
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [home_team, away_team, start_time],
     );
     return result.rows[0];
   }
@@ -145,6 +179,25 @@ class Match {
       [match_id, message, event_type || "general", minute],
     );
     return result.rows[0];
+  }
+
+  /**
+   * Check whether a commentary event already exists for a match.
+   * Used during sync to avoid duplicate commentary inserts on each poll.
+   */
+  static async commentaryExists({ match_id, message, event_type, minute }) {
+    const result = await query(
+      `SELECT id
+       FROM commentary
+       WHERE match_id = $1
+         AND message = $2
+         AND event_type = $3
+         AND COALESCE(minute, -1) = COALESCE($4, -1)
+       ORDER BY id DESC
+       LIMIT 1`,
+      [match_id, message, event_type || "general", minute],
+    );
+    return Boolean(result.rows[0]);
   }
 
   /**

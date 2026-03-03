@@ -1,7 +1,7 @@
 // Main server file - Entry point for the application
 // Initializes Express server and WebSocket server
 
-import "dotenv/config";
+import "./config/env.js";
 import cors from "cors";
 import express from "express";
 import http from "http";
