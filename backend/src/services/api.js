@@ -14,24 +14,54 @@ const API_KEY = process.env.API_FOOTBALL_KEY;
 const API_HOST = "v3.football.api-sports.io";
 const BASE_URL = `https://${API_HOST}`;
 
+const ensureApiKey = () => {
+  if (!API_KEY) {
+    throw new Error(
+      "Missing API_FOOTBALL_KEY environment variable. Set it before syncing live matches.",
+    );
+  }
+};
+
+const getApiHeaders = () => ({
+  "x-rapidapi-key": API_KEY,
+  "x-rapidapi-host": API_HOST,
+});
+
+const formatApiError = (error) => {
+  const status = error?.response?.status;
+  const rawDetail =
+    error?.response?.data?.message || error?.response?.data?.errors || error.message;
+  let detail = rawDetail;
+
+  if (rawDetail && typeof rawDetail === "object") {
+    try {
+      detail = JSON.stringify(rawDetail);
+    } catch {
+      detail = error.message;
+    }
+  }
+
+  return status
+    ? `API-Football request failed (${status}): ${detail}`
+    : `API-Football request failed: ${detail}`;
+};
+
 /**
  * Fetch live matches from API-Football
  * @returns {Promise<Array>} - Array of live match data
  */
 const fetchLiveMatches = async () => {
   try {
+    ensureApiKey();
     const response = await axios.get(`${BASE_URL}/fixtures`, {
       params: { live: "all" },
-      headers: {
-        "x-rapidapi-key": API_KEY,
-        "x-rapidapi-host": API_HOST,
-      },
+      headers: getApiHeaders(),
     });
 
     return response.data.response || [];
   } catch (error) {
-    console.error("Error fetching live matches:", error.message);
-    return [];
+    console.error("Error fetching live matches:", formatApiError(error));
+    throw error;
   }
 };
 
@@ -42,18 +72,36 @@ const fetchLiveMatches = async () => {
  */
 const fetchMatchById = async (fixtureId) => {
   try {
+    ensureApiKey();
     const response = await axios.get(`${BASE_URL}/fixtures`, {
       params: { id: fixtureId },
-      headers: {
-        "x-rapidapi-key": API_KEY,
-        "x-rapidapi-host": API_HOST,
-      },
+      headers: getApiHeaders(),
     });
 
     return response.data.response[0] || null;
   } catch (error) {
-    console.error(`Error fetching match ${fixtureId}:`, error.message);
-    return null;
+    console.error(`Error fetching match ${fixtureId}:`, formatApiError(error));
+    throw error;
+  }
+};
+
+/**
+ * Fetch match events for commentary generation.
+ * API-Football returns events from /fixtures/events, not always in /fixtures.
+ * @param {number} fixtureId - API-Football fixture ID
+ * @returns {Promise<Array>} - Fixture events
+ */
+const fetchMatchEvents = async (fixtureId) => {
+  try {
+    ensureApiKey();
+    const response = await axios.get(`${BASE_URL}/fixtures/events`, {
+      params: { fixture: fixtureId },
+      headers: getApiHeaders(),
+    });
+    return response.data.response || [];
+  } catch (error) {
+    console.error(`Error fetching fixture events for ${fixtureId}:`, formatApiError(error));
+    throw error;
   }
 };
 
@@ -111,20 +159,23 @@ const generateCommentaryFromEvents = (events) => {
 
     switch (event.type) {
       case "Goal":
-        message = `⚽ GOAL! ${event.player.name} scores for ${event.team.name}!`;
+        message = `GOAL! ${event?.player?.name || "Unknown player"} scores for ${
+          event?.team?.name || "Unknown team"
+        }!`;
         eventType = "goal";
         break;
       case "Card":
-        const cardEmoji = event.detail === "Yellow Card" ? "🟨" : "🟥";
-        message = `${cardEmoji} ${event.detail} for ${event.player.name}`;
+        message = `${event.detail || "Card"} for ${event?.player?.name || "Unknown player"}`;
         eventType = "card";
         break;
       case "subst":
-        message = `🔄 Substitution: ${event.player.name} OFF, ${event.assist.name} ON`;
+        message = `Substitution: ${event?.player?.name || "Unknown player"} OFF, ${
+          event?.assist?.name || "Unknown player"
+        } ON`;
         eventType = "substitution";
         break;
       case "Var":
-        message = `📹 VAR: ${event.detail}`;
+        message = `VAR: ${event.detail}`;
         eventType = "var";
         break;
       default:
@@ -145,24 +196,28 @@ const generateCommentaryFromEvents = (events) => {
  */
 const syncLiveMatches = async () => {
   try {
-    console.log("🔄 Syncing live matches from API-Football...");
+    console.log("Syncing live matches from API-Football...");
 
     const liveMatches = await fetchLiveMatches();
 
     if (liveMatches.length === 0) {
-      console.log("📭 No live matches found");
-      return;
+      console.log("No live matches found");
+      return { fetched: 0, synced: 0 };
     }
 
-    console.log(`📊 Found ${liveMatches.length} live matches`);
+    console.log(`Found ${liveMatches.length} live matches`);
+    let synced = 0;
 
     for (const apiMatch of liveMatches) {
-      await syncSingleMatch(apiMatch);
+      const match = await syncSingleMatch(apiMatch);
+      if (match) synced += 1;
     }
 
-    console.log("✅ Live matches sync complete");
+    console.log(`Live matches sync complete (${synced}/${liveMatches.length})`);
+    return { fetched: liveMatches.length, synced };
   } catch (error) {
-    console.error("❌ Error syncing live matches:", error);
+    console.error("Error syncing live matches:", error.message);
+    throw error;
   }
 };
 
@@ -173,22 +228,53 @@ const syncLiveMatches = async () => {
 const syncSingleMatch = async (apiMatch) => {
   try {
     const matchData = transformMatchData(apiMatch);
+    const fixtureId = apiMatch?.fixture?.id;
 
-    // Check if match exists in our database by API fixture ID
-    // For now, we'll create it if it doesn't exist
-    // In production, you'd store api_fixture_id and query by it
-
-    const match = await Match.create(matchData);
-
-    console.log(
-      `✅ Synced match: ${matchData.team_home} vs ${matchData.team_away}`,
+    const existingMatch = await Match.findExistingForSync(
+      matchData.team_home,
+      matchData.team_away,
+      matchData.start_time,
     );
 
-    // Generate and add commentary from events
-    if (apiMatch.events && apiMatch.events.length > 0) {
-      const commentaries = generateCommentaryFromEvents(apiMatch.events);
+    let match;
+    if (existingMatch) {
+      await Match.updateScore(existingMatch.id, {
+        score_home: matchData.score_home,
+        score_away: matchData.score_away,
+      });
+      await Match.updateStatus(existingMatch.id, matchData.status);
+      const refreshedMatch = await Match.getById(existingMatch.id);
+      if (!refreshedMatch) {
+        throw new Error(`Updated match ${existingMatch.id} could not be reloaded`);
+      }
+      match = refreshedMatch;
+    } else {
+      match = await Match.create(matchData);
+    }
+
+    console.log(`Synced match: ${matchData.team_home} vs ${matchData.team_away}`);
+
+    // Most live fixture payloads do not include events; query fixture events directly.
+    let events = Array.isArray(apiMatch.events) ? apiMatch.events : [];
+    if (events.length === 0 && fixtureId) {
+      try {
+        events = await fetchMatchEvents(fixtureId);
+      } catch (err) {
+        console.error(`fetchMatchEvents failed for fixtureId ${fixtureId}:`, err);
+        events = [];
+      }
+    }
+
+    if (events.length > 0) {
+      const commentaries = generateCommentaryFromEvents(events);
 
       for (const commentary of commentaries) {
+        const alreadyExists = await Match.commentaryExists({
+          match_id: match.id,
+          ...commentary,
+        });
+        if (alreadyExists) continue;
+
         const savedCommentary = await Match.addCommentary({
           match_id: match.id,
           ...commentary,
@@ -207,8 +293,10 @@ const syncSingleMatch = async (apiMatch) => {
       type: "score_update",
       data: match,
     });
+    return match;
   } catch (error) {
-    console.error("❌ Error syncing match:", error);
+    console.error("Error syncing match:", error.message);
+    return null;
   }
 };
 
@@ -218,10 +306,12 @@ const syncSingleMatch = async (apiMatch) => {
  * @param {number} intervalSeconds - How often to poll (default: 60 seconds)
  */
 const startLiveMatchPolling = (intervalSeconds = 60) => {
-  console.log(`🚀 Starting live match polling (every ${intervalSeconds}s)`);
+  console.log(`Starting live match polling (every ${intervalSeconds}s)`);
 
   // Initial sync
-  syncLiveMatches();
+  syncLiveMatches().catch((error) => {
+    console.error("Initial syncLiveMatches failed:", error);
+  });
 
   // Set up interval
   const interval = setInterval(syncLiveMatches, intervalSeconds * 1000);
@@ -236,13 +326,14 @@ const startLiveMatchPolling = (intervalSeconds = 60) => {
 const stopLiveMatchPolling = (interval) => {
   if (interval) {
     clearInterval(interval);
-    console.log("🛑 Stopped live match polling");
+    console.log("Stopped live match polling");
   }
 };
 
 export {
   fetchLiveMatches,
   fetchMatchById,
+  fetchMatchEvents,
   syncLiveMatches,
   syncSingleMatch,
   startLiveMatchPolling,
@@ -254,6 +345,7 @@ export {
 export default {
   fetchLiveMatches,
   fetchMatchById,
+  fetchMatchEvents,
   syncLiveMatches,
   syncSingleMatch,
   startLiveMatchPolling,

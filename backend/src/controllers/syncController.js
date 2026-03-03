@@ -9,11 +9,40 @@ import apiFootballService from "../services/api.js";
  */
 const syncLiveMatches = async (req, res, next) => {
   try {
-    await apiFootballService.syncLiveMatches();
+    const result = await apiFootballService.syncLiveMatches();
+    const summary = {
+      totalSynced: 0,
+      totalFetched: 0,
+      fixtureIds: [],
+      errors: [],
+    };
+
+    if (Array.isArray(result)) {
+      summary.totalSynced = result.length;
+      summary.fixtureIds = result
+        .map((item) => item?.fixtureId ?? item?.fixture?.id ?? item?.id)
+        .filter(Boolean);
+    } else if (result && typeof result === "object") {
+      summary.totalSynced = Number(result.synced ?? result.syncedCount ?? 0);
+      summary.totalFetched = Number(result.fetched ?? result.total ?? 0);
+
+      if (Array.isArray(result.fixtureIds)) {
+        summary.fixtureIds = result.fixtureIds.filter(Boolean);
+      } else if (Array.isArray(result.items)) {
+        summary.fixtureIds = result.items
+          .map((item) => item?.fixtureId ?? item?.fixture?.id ?? item?.id)
+          .filter(Boolean);
+      }
+
+      if (Array.isArray(result.errors)) {
+        summary.errors = result.errors;
+      }
+    }
 
     res.json({
       success: true,
       message: "Live matches sync triggered successfully",
+      data: summary,
     });
   } catch (error) {
     next(error);
