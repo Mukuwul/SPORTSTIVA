@@ -118,7 +118,6 @@ const transformMatchData = (apiMatch) => {
     score_away: apiMatch.goals.away || 0,
     status: mapStatus(apiMatch.fixture.status.short),
     start_time: apiMatch.fixture.date,
-    // Store API fixture ID for reference
     api_fixture_id: apiMatch.fixture.id,
   };
 };
