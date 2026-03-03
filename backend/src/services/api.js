@@ -30,7 +30,7 @@ const fetchLiveMatches = async () => {
 
     return response.data.response || [];
   } catch (error) {
-    console.error("❌ Error fetching live matches:", error.message);
+    console.error("Error fetching live matches:", error.message);
     return [];
   }
 };
@@ -52,7 +52,7 @@ const fetchMatchById = async (fixtureId) => {
 
     return response.data.response[0] || null;
   } catch (error) {
-    console.error(`❌ Error fetching match ${fixtureId}:`, error.message);
+    console.error(`Error fetching match ${fixtureId}:`, error.message);
     return null;
   }
 };
@@ -70,7 +70,6 @@ const transformMatchData = (apiMatch) => {
     score_away: apiMatch.goals.away || 0,
     status: mapStatus(apiMatch.fixture.status.short),
     start_time: apiMatch.fixture.date,
-    // Store API fixture ID for reference
     api_fixture_id: apiMatch.fixture.id,
   };
 };
