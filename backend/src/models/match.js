@@ -82,6 +82,10 @@ class Match {
   /**
    * Find likely existing match for sync updates.
    * Matches by teams and start time window to avoid duplicate inserts on each poll.
+   * @param {string} home_team - Home team name
+   * @param {string} away_team - Away team name
+   * @param {string|Date} start_time - Match start time
+   * @returns {Promise<Object|null>} - Existing match row if found, otherwise null
    */
   static async findExistingForSync(home_team, away_team, start_time) {
     const result = await query(
@@ -192,7 +196,7 @@ class Match {
        WHERE match_id = $1
          AND message = $2
          AND event_type = $3
-         AND COALESCE(minute, -1) = COALESCE($4, -1)
+         AND minute IS NOT DISTINCT FROM $4
        ORDER BY id DESC
        LIMIT 1`,
       [match_id, message, event_type || "general", minute],

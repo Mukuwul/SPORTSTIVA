@@ -1,5 +1,7 @@
-const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+export const DEFAULT_API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 const API_BASE_STORAGE_KEY = "sportstiva.api.base";
+const encodePathSegment = (value) => encodeURIComponent(String(value));
 
 export function normalizeApiBase(value) {
   const raw = String(value || "").trim();
@@ -38,25 +40,49 @@ export function deriveWsUrl(apiBase) {
 }
 
 export function loadApiBase() {
-  const stored = localStorage.getItem(API_BASE_STORAGE_KEY);
+  let stored;
+  try {
+    stored = localStorage.getItem(API_BASE_STORAGE_KEY);
+  } catch (error) {
+    console.error("Failed to read API base from localStorage:", error);
+  }
   return normalizeApiBase(stored) || DEFAULT_API_BASE;
 }
 
 export function saveApiBase(base) {
   const normalized = normalizeApiBase(base);
   if (!normalized) return "";
-  localStorage.setItem(API_BASE_STORAGE_KEY, normalized);
-  return normalized;
+  try {
+    localStorage.setItem(API_BASE_STORAGE_KEY, normalized);
+    return normalized;
+  } catch (error) {
+    console.error("Failed to save API base to localStorage:", error);
+    return "";
+  }
 }
 
-async function request(apiBase, path, { method = "GET", body } = {}) {
-  const response = await fetch(`${apiBase}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+async function request(apiBase, path, { method = "GET", body, timeoutMs = 15000 } = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+
+  try {
+    response = await fetch(`${apiBase}${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`${method} ${path} timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.success === false) {
@@ -79,31 +105,37 @@ export const api = {
     return request(apiBase, "/api/matches/live");
   },
   getMatchById(apiBase, matchId) {
-    return request(apiBase, `/api/matches/${matchId}`);
+    return request(apiBase, `/api/matches/${encodePathSegment(matchId)}`);
   },
   createMatch(apiBase, body) {
     return request(apiBase, "/api/matches", { method: "POST", body });
   },
   updateScore(apiBase, matchId, body) {
-    return request(apiBase, `/api/matches/${matchId}/score`, {
+    return request(apiBase, `/api/matches/${encodePathSegment(matchId)}/score`, {
       method: "PATCH",
       body,
     });
   },
   updateStatus(apiBase, matchId, body) {
-    return request(apiBase, `/api/matches/${matchId}/status`, {
+    return request(apiBase, `/api/matches/${encodePathSegment(matchId)}/status`, {
       method: "PATCH",
       body,
     });
   },
   deleteMatch(apiBase, matchId) {
-    return request(apiBase, `/api/matches/${matchId}`, { method: "DELETE" });
+    return request(apiBase, `/api/matches/${encodePathSegment(matchId)}`, {
+      method: "DELETE",
+    });
   },
   getCommentary(apiBase, matchId, limit = 100) {
-    return request(apiBase, `/api/matches/${matchId}/commentary?limit=${limit}`);
+    const query = new URLSearchParams({ limit: String(limit) }).toString();
+    return request(
+      apiBase,
+      `/api/matches/${encodePathSegment(matchId)}/commentary?${query}`,
+    );
   },
   addCommentary(apiBase, matchId, body) {
-    return request(apiBase, `/api/matches/${matchId}/commentary`, {
+    return request(apiBase, `/api/matches/${encodePathSegment(matchId)}/commentary`, {
       method: "POST",
       body,
     });
@@ -115,6 +147,8 @@ export const api = {
     return request(apiBase, "/api/sync/live-matches", { method: "POST" });
   },
   syncFixture(apiBase, fixtureId) {
-    return request(apiBase, `/api/sync/match/${fixtureId}`, { method: "POST" });
+    return request(apiBase, `/api/sync/match/${encodePathSegment(fixtureId)}`, {
+      method: "POST",
+    });
   },
 };

@@ -29,8 +29,18 @@ const getApiHeaders = () => ({
 
 const formatApiError = (error) => {
   const status = error?.response?.status;
-  const detail =
+  const rawDetail =
     error?.response?.data?.message || error?.response?.data?.errors || error.message;
+  let detail = rawDetail;
+
+  if (rawDetail && typeof rawDetail === "object") {
+    try {
+      detail = JSON.stringify(rawDetail);
+    } catch {
+      detail = error.message;
+    }
+  }
+
   return status
     ? `API-Football request failed (${status}): ${detail}`
     : `API-Football request failed: ${detail}`;
@@ -229,12 +239,16 @@ const syncSingleMatch = async (apiMatch) => {
 
     let match;
     if (existingMatch) {
-      const scored = await Match.updateScore(existingMatch.id, {
+      await Match.updateScore(existingMatch.id, {
         score_home: matchData.score_home,
         score_away: matchData.score_away,
       });
-      const updated = await Match.updateStatus(existingMatch.id, matchData.status);
-      match = updated || scored || existingMatch;
+      await Match.updateStatus(existingMatch.id, matchData.status);
+      const refreshedMatch = await Match.getById(existingMatch.id);
+      if (!refreshedMatch) {
+        throw new Error(`Updated match ${existingMatch.id} could not be reloaded`);
+      }
+      match = refreshedMatch;
     } else {
       match = await Match.create(matchData);
     }
@@ -246,7 +260,8 @@ const syncSingleMatch = async (apiMatch) => {
     if (events.length === 0 && fixtureId) {
       try {
         events = await fetchMatchEvents(fixtureId);
-      } catch {
+      } catch (err) {
+        console.error(`fetchMatchEvents failed for fixtureId ${fixtureId}:`, err);
         events = [];
       }
     }
@@ -295,7 +310,9 @@ const startLiveMatchPolling = (intervalSeconds = 60) => {
   console.log(`Starting live match polling (every ${intervalSeconds}s)`);
 
   // Initial sync
-  syncLiveMatches();
+  syncLiveMatches().catch((error) => {
+    console.error("Initial syncLiveMatches failed:", error);
+  });
 
   // Set up interval
   const interval = setInterval(syncLiveMatches, intervalSeconds * 1000);

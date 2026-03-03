@@ -26,3 +26,9 @@ You can override it in two ways:
 
 1. Use the Connection panel in the app and save config.
 2. Set `VITE_API_BASE_URL` in `frontend/.env`.
+
+Create `frontend/.env` with:
+
+```env
+VITE_API_BASE_URL=http://localhost:5000
+```

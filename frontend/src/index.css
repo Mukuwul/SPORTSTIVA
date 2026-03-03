@@ -16,6 +16,8 @@
   --green-700: #1f754c;
   --warning-700: #8f6300;
   --danger-600: #b74040;
+  --panel-bg: #fffdf4;
+  --panel-shadow: 0 14px 30px rgb(31 45 70 / 10%);
 
   font-family: "Barlow", sans-serif;
   line-height: 1.45;
@@ -38,12 +40,22 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   background:
-    radial-gradient(circle at 10% 15%, rgba(232, 184, 0, 0.28) 0%, transparent 34%),
-    radial-gradient(circle at 88% 0%, rgba(30, 70, 143, 0.17) 0%, transparent 30%),
+    radial-gradient(
+      circle at 10% 15%,
+      color-mix(in srgb, var(--yellow-500) 28%, transparent) 0%,
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 88% 0%,
+      color-mix(in srgb, var(--blue-700) 17%, transparent) 0%,
+      transparent 30%
+    ),
     linear-gradient(165deg, #fff6d2 0%, #fffef8 55%, #f2f8ff 100%);
 }
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
 }

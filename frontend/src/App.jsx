@@ -32,6 +32,7 @@ function App() {
 
   const wsRef = useRef(null);
   const subscribedMatchRef = useRef(null);
+  const commentaryRequestIdRef = useRef(0);
 
   const [upcomingMatches, pastMatches] = useMemo(() => {
     const sortedByStart = [...allMatches].sort((a, b) => {
@@ -105,12 +106,14 @@ function App() {
     }
   }
 
-  async function loadCommentary(matchId) {
+  async function loadCommentary(matchId, requestId = commentaryRequestIdRef.current) {
     if (!matchId) return;
     try {
       const response = await api.getCommentary(apiBase, matchId, 100);
+      if (requestId !== commentaryRequestIdRef.current) return;
       setCommentary(Array.isArray(response.data) ? response.data : []);
     } catch {
+      if (requestId !== commentaryRequestIdRef.current) return;
       setCommentary([]);
     }
   }
@@ -244,7 +247,13 @@ function App() {
 
     if (type === "new_commentary" && message.data) {
       if (Number(selectedLiveMatchId) === Number(message.data.match_id)) {
-        setCommentary((current) => [...current, message.data]);
+        setCommentary((current) => {
+          const incomingKey = commentaryIdentity(message.data);
+          if (current.some((item) => commentaryIdentity(item) === incomingKey)) {
+            return current;
+          }
+          return [...current, message.data];
+        });
       }
       return;
     }
@@ -268,6 +277,7 @@ function App() {
 
   useEffect(() => {
     if (!selectedLiveMatchId) {
+      commentaryRequestIdRef.current += 1;
       setCommentary([]);
       if (subscribedMatchRef.current) {
         unsubscribeFromMatch(subscribedMatchRef.current);
@@ -275,16 +285,29 @@ function App() {
       return;
     }
 
-    loadCommentary(selectedLiveMatchId);
+    commentaryRequestIdRef.current += 1;
+    const requestId = commentaryRequestIdRef.current;
+
+    loadCommentary(selectedLiveMatchId, requestId);
     subscribeToMatch(selectedLiveMatchId);
 
     const interval = setInterval(
-      () => loadCommentary(selectedLiveMatchId),
+      () => loadCommentary(selectedLiveMatchId, requestId),
       COMMENTARY_POLL_MS,
     );
-    return () => clearInterval(interval);
+    return () => {
+      commentaryRequestIdRef.current += 1;
+      clearInterval(interval);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLiveMatchId, apiBase]);
+
+  function handleMatchCardKeyDown(event, matchId) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setSelectedLiveMatchId(matchId);
+    }
+  }
 
   return (
     <div className="page">
@@ -371,7 +394,11 @@ function App() {
                   Number(match.id) === Number(selectedLiveMatchId) ? "match-selected" : ""
                 }`}
                 key={match.id}
+                role="button"
+                tabIndex={0}
+                aria-pressed={Number(match.id) === Number(selectedLiveMatchId)}
                 onClick={() => setSelectedLiveMatchId(match.id)}
+                onKeyDown={(event) => handleMatchCardKeyDown(event, match.id)}
               >
                 <div>
                   <h4>
@@ -455,7 +482,9 @@ function App() {
               <h2>Live Commentary</h2>
               <button
                 className="btn btn-secondary"
-                onClick={() => loadCommentary(selectedLiveMatchId)}
+                onClick={() =>
+                  loadCommentary(selectedLiveMatchId, commentaryRequestIdRef.current)
+                }
               >
                 Reload
               </button>
@@ -463,7 +492,7 @@ function App() {
             <p className="subline">
               Match #{selectedLiveMatchId} selected. Commentary updates in real time.
             </p>
-            <div className="list commentary-list">
+            <div className="list commentary-list" aria-live="polite" aria-atomic="true">
               {commentary.length === 0 && (
                 <p className="muted">No commentary available yet for this match.</p>
               )}
@@ -526,6 +555,13 @@ function mergeLiveMatch(current, updated) {
     filtered.unshift(updated);
   }
   return filtered.slice(0, 4);
+}
+
+function commentaryIdentity(item) {
+  if (item?.id !== undefined && item?.id !== null) {
+    return `id:${item.id}`;
+  }
+  return `fallback:${item?.match_id ?? ""}:${item?.minute ?? ""}:${item?.event_type ?? ""}:${item?.message ?? ""}:${item?.created_at ?? ""}`;
 }
 
 export default App;

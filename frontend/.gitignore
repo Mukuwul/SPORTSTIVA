@@ -11,6 +11,23 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.local
+.env.*.local
+
+coverage/
+coverage/*.lcov
+.nyc_output/
+.cache/
+.parcel-cache/
+.vite/
+.turbo/
+.jest-cache/
+
+# Additional package manager / test runner logs
+npm-*.log
+yarn-*.log
+pnpm-*.log
 
 # Editor directories and files
 .vscode/*
